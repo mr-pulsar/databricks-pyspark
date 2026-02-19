@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Natural Language to SQL Builder</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --card: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #22c55e;
+      --accent-2: #38bdf8;
+      --warn: #f59e0b;
+      --border: #374151;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: linear-gradient(120deg, var(--bg), #111827 65%, #0b1022);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .container {
+      width: min(980px, 100%);
+      background: rgba(17, 24, 39, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.4rem, 2vw, 2rem);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    p.lead {
+      margin: 0 0 20px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      resize: vertical;
+      background: #0b1220;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 1rem;
+      line-height: 1.45;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #052e16;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 11px 16px;
+      transition: transform .06s ease, opacity .2s ease;
+    }
+
+    button.secondary {
+      background: #0b1220;
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+
+    button:hover { opacity: .93; }
+    button:active { transform: translateY(1px); }
+
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    .chip {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: .82rem;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      background: #0b1220;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      color: var(--accent-2);
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      line-height: 1.5;
+      font-size: .95rem;
+      color: #d1fae5;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .hint {
+      color: var(--warn);
+      font-size: .85rem;
+      margin-top: 8px;
+    }
+
+    .footer {
+      margin-top: 12px;
+      font-size: .83rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>🧠 Natural Language → SQL Builder</h1>
+    <p class="lead">
+      Enter a business question in plain English. This high-level generator proposes SQL for common patterns including <strong>JOINs</strong>,
+      <strong>TRIGGERs</strong>, and analytical reports.
+    </p>
+
+    <div class="grid">
+      <label for="prompt">Natural Language Request</label>
+      <textarea id="prompt" placeholder="Example: Show top 5 customers by total order amount and include their region"></textarea>
+
+      <div class="row">
+        <button id="generateBtn">Generate SQL</button>
+        <button id="copyBtn" class="secondary">Copy SQL</button>
+      </div>
+
+      <div class="chips" id="examples"></div>
+
+      <section class="card">
+        <h2>Generated SQL</h2>
+        <pre id="output">-- SQL will appear here</pre>
+        <div class="hint" id="hint"></div>
+      </section>
+
+      <section class="card">
+        <h2>Detected Features</h2>
+        <pre id="features">None yet.</pre>
+      </section>
+
+      <div class="footer">Tip: mention words like "join", "trigger", "top", "group by", "monthly", or table names to improve quality.</div>
+    </div>
+  </main>
+
+  <script>
+    const examples = [
+      'Join customers and orders to show each customer name with total order amount.',
+      'Create a trigger to log employee salary updates into audit table.',
+      'Show monthly revenue for 2024 grouped by month.',
+      'Top 10 products by quantity sold with category name.',
+      'List high-value orders above 5000 with customer and salesperson details.'
+    ];
+
+    const promptEl = document.getElementById('prompt');
+    const outputEl = document.getElementById('output');
+    const hintEl = document.getElementById('hint');
+    const featuresEl = document.getElementById('features');
+    const examplesEl = document.getElementById('examples');
+
+    function renderExamples() {
+      examples.forEach((sample) => {
+        const chip = document.createElement('button');
+        chip.className = 'chip';
+        chip.textContent = sample;
+        chip.addEventListener('click', () => {
+          promptEl.value = sample;
+          generateSQL();
+        });
+        examplesEl.appendChild(chip);
+      });
+    }
+
+    function hasAny(text, words) {
+      return words.some((word) => text.includes(word));
+    }
+
+    function generateSQL() {
+      const input = promptEl.value.trim();
+      if (!input) {
+        outputEl.textContent = '-- Please enter a natural language request.';
+        featuresEl.textContent = 'No input detected.';
+        hintEl.textContent = '';
+        return;
+      }
+
+      const q = input.toLowerCase();
+      const features = [];
+      let sql = '';
+      let hint = 'Review table/column names and adapt to your schema before execution.';
+
+      if (hasAny(q, ['trigger', 'audit', 'log'])) {
+        features.push('Trigger', 'Update Event', 'Audit Logging');
+        sql = `CREATE TRIGGER trg_employee_salary_audit\nAFTER UPDATE OF salary ON employees\nFOR EACH ROW\nWHEN (OLD.salary IS DISTINCT FROM NEW.salary)\nBEGIN\n  INSERT INTO employee_salary_audit (employee_id, old_salary, new_salary, changed_at)\n  VALUES (OLD.employee_id, OLD.salary, NEW.salary, CURRENT_TIMESTAMP);\nEND;`;
+      } else if (hasAny(q, ['join', 'customer', 'order', 'product', 'category', 'salesperson'])) {
+        features.push('JOIN', 'Aggregation', 'Business Report');
+        sql = `SELECT\n  c.customer_id,\n  c.customer_name,\n  r.region_name,\n  SUM(o.order_amount) AS total_order_amount\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nLEFT JOIN regions r ON c.region_id = r.region_id\nWHERE o.order_date >= DATE '2024-01-01'\nGROUP BY c.customer_id, c.customer_name, r.region_name\nORDER BY total_order_amount DESC\nLIMIT 10;`;
+      } else if (hasAny(q, ['monthly', 'month', 'revenue', 'group by', 'top', 'high-value', 'analytics', 'report'])) {
+        features.push('High-Level Query', 'Time Aggregation', 'Ranking');
+        sql = `SELECT\n  DATE_TRUNC('month', order_date) AS month,\n  SUM(order_amount) AS monthly_revenue,\n  COUNT(DISTINCT customer_id) AS active_customers\nFROM orders\nWHERE order_date BETWEEN DATE '2024-01-01' AND DATE '2024-12-31'\nGROUP BY DATE_TRUNC('month', order_date)\nORDER BY month;`;
+      } else {
+        features.push('Template Query');
+        sql = `SELECT\n  t.column_a,\n  t.column_b\nFROM your_table t\nWHERE t.created_at >= CURRENT_DATE - INTERVAL '30 day'\nORDER BY t.created_at DESC\nLIMIT 100;`;
+        hint = 'Could not infer a specific pattern. Include terms such as JOIN, TRIGGER, monthly revenue, or top customers.';
+      }
+
+      if (hasAny(q, ['top', 'highest', 'best'])) {
+        features.push('Top-N Filter');
+      }
+      if (hasAny(q, ['where', 'filter', 'above', 'below'])) {
+        features.push('Conditional Filtering');
+      }
+
+      outputEl.textContent = sql;
+      featuresEl.textContent = features.join(' | ');
+      hintEl.textContent = hint;
+    }
+
+    async function copySQL() {
+      try {
+        await navigator.clipboard.writeText(outputEl.textContent);
+        hintEl.textContent = 'SQL copied to clipboard.';
+      } catch {
+        hintEl.textContent = 'Unable to copy automatically. Please copy manually.';
+      }
+    }
+
+    document.getElementById('generateBtn').addEventListener('click', generateSQL);
+    document.getElementById('copyBtn').addEventListener('click', copySQL);
+
+    renderExamples();
+  </script>
+</body>
+</html>
